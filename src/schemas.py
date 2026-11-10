@@ -1,4 +1,4 @@
-"""Pydantic models: the LLM's structured output (CaseExtraction) and the final output (CaseOutput).
+"""Pydantic models: the LLMs' structured outputs (CaseFacts, CaseAssessment) and the final output (CaseOutput).
 
 Field descriptions are part of the JSON Schema sent to the LLM, so they double as extraction instructions.
 """
@@ -18,7 +18,10 @@ class Evidence(BaseModel):
 class CriterionAssessment(BaseModel):
     status: Literal["met", "not_met", "unclear"]
     evidence: list[Evidence]
-    note: str = Field(description="One-sentence justification of the status, grounded in the evidence.")
+    note: str = Field(
+        description="One-sentence justification of the status, grounded in the evidence. Address only this "
+        "criterion; report coding, administrative or other side issues as discrepancies instead."
+    )
 
 
 class Criteria(BaseModel):
@@ -41,8 +44,10 @@ class Discrepancy(BaseModel):
     description: str
     documents: list[str] = Field(description="File names of the documents involved.")
     severity: Literal["material", "minor"] = Field(
-        description="'material' if it could change whether the request should be approved "
-        "(e.g. different patient, laterality, procedure or key finding); otherwise 'minor'."
+        description="'material' only if it puts in doubt whether the procedure is clinically justified for "
+        "this patient: e.g. the documents describe different patients, a different side or lobe, a different "
+        "procedure, or contradictory key findings. Coding, billing and administrative issues are 'minor' "
+        "(still listed, so a human can see them)."
     )
     rationale: str = Field(description="Why this severity.")
 
@@ -92,12 +97,19 @@ class Clinical(BaseModel):
     )
 
 
-class CaseExtraction(BaseModel):
+class CaseFacts(BaseModel):
+    """LLM call A: what the documents say."""
+
     case_id: str | None = Field(description="Prior-authorization tracking number, e.g. 'PA-2025-847291'.")
     patient: Patient
     requesting_provider: Provider
     request: Request
     clinical: Clinical
+
+
+class CaseAssessment(BaseModel):
+    """LLM call B: judgments on the documents."""
+
     criteria: Criteria
     discrepancies: list[Discrepancy] = Field(
         description="Inconsistencies between documents. Empty list if none."

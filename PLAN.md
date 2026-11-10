@@ -10,16 +10,17 @@ traces back to specific criteria and quotes from the documents.
 | Topic | Choice | Why |
 |---|---|---|
 | Language / tooling | Python 3.13, `uv`, Pydantic, pypdf | pypdf text extraction verified on all 5 docs |
-| LLM access | Own `LLMProvider` Protocol + Anthropic SDK implementation (`claude-opus-5-5`, structured outputs into Pydantic) | No framework needed for 1 fixed call; swapping provider = one new class |
+| LLM access | Own `LLMProvider` Protocol + Anthropic SDK implementation (`claude-opus-5-5`, structured outputs into Pydantic) | No framework needed for 2 fixed calls; swapping provider = one new class |
 | Decision | Hybrid: LLM judges each criterion (met / not_met / unclear + evidence quotes); plain code combines them into the status | Auditable, unit-testable, judgment stays where it's needed |
-| Extraction | One call over all labeled documents, returning facts, criterion assessments with evidence, and a discrepancy list | Simple; cross-document comparison comes naturally |
+| Extraction | Two parallel calls over all labeled documents: (A) facts, (B) criterion assessments with evidence + discrepancies | Separates reading from judging; each call has one job; each schema stays well under the structured-output size limit (one combined schema was rejected as too large) |
 | Tests | Unit tests for the decision logic (no LLM) + one saved live run on the real case | Fast, free, shows the MANUAL_REVIEW path works |
 
 ## Pipeline
 ```
 case dir of PDFs
   └─ 1. documents.py   load PDFs → [Document(name, text)]                  (pypdf, no LLM)
-  └─ 2. extraction.py  LLM call #1 → CaseExtraction                        (structured output)
+  └─ 2. extraction.py  2 LLM calls in parallel                             (structured output)
+                       A → CaseFacts       B → CaseAssessment
   └─ 3. decision.py    pure function → Decision(status, reason)            (no LLM)
                        quote check → rules → reason from a string template
   └─ 4. main.py        assemble final output, write output/<case_id>.json,
@@ -59,7 +60,7 @@ the reasons for review are exact; and it's deterministic, testable and free.
 These are defined as Pydantic models in `schemas.py`. The JSON Schema sent to the API is generated
 from them. Below, each field shows its type; `| null` means the value may be missing from the documents.
 
-### LLM call #1: `CaseExtraction` (structured output)
+### LLM call A: `CaseFacts` (structured output): what the documents say
 ```jsonc
 {
   "case_id": "string | null",                    // tracking number, e.g. "PA-2025-847291"
@@ -94,7 +95,13 @@ from them. Below, each field shows its type; `| null` means the value may be mis
     "coagulation_status": "string | null",       // e.g. "Normal"
     "labs_summary": "string | null",
     "procedure_rationale": "string | null"       // why this procedure was chosen over the alternatives
-  },
+  }
+}
+```
+
+### LLM call B: `CaseAssessment` (structured output): judgments on the documents
+```jsonc
+{
   "criteria": {                                  // fixed keys, so every criterion is always assessed
     "suspicious_nodule":             { "$ref": "#/CriterionAssessment" },
     "tissue_sampling_recommended":   { "$ref": "#/CriterionAssessment" },
@@ -121,7 +128,7 @@ from them. Below, each field shows its type; `| null` means the value may be mis
 ```
 
 ### Final output: `output/<case_id>.json`
-Exactly the shape the assignment specifies. Built in code from `CaseExtraction` and the `Decision`.
+Exactly the shape the assignment specifies. Built in code from `CaseFacts` and the `Decision`.
 ```json
 {
   "case_id": "PA-2025-847291",
@@ -165,7 +172,7 @@ Run: `uv run python src/main.py cases/PA-2025-847291`
 ## Build order (commit after each)
 1. Scaffold (pyproject, layout) + `documents.py`
 2. `schemas.py` + `llm.py` (Protocol + Anthropic impl)
-3. `extraction.py` (prompt + call), checked by hand on the real case
+3. `extraction.py` (2 prompts + parallel calls), checked by hand on the real case
 4. `decision.py` (quote check + rules + reason template) + `tests/test_decision.py`
 5. `main.py` → save `output/PA-2025-847291.json`
 6. README
@@ -174,12 +181,22 @@ Run: `uv run python src/main.py cases/PA-2025-847291`
 - Run instructions; how the recommendation is made (the pipeline + rules above)
 - **Design decisions** (each with the alternatives considered and why we chose this one):
   1. *Own `LLMProvider` interface + Anthropic SDK, not LangChain/PydanticAI*: a framework is overkill for a
-     single fixed LLM call; the interface keeps the provider swappable while every line stays readable.
+     two fixed LLM calls; the interface keeps the provider swappable while every line stays readable.
   2. *Hybrid decision*: the LLM judges each criterion with evidence quotes; plain code combines the
      judgments into the status. Rejected: "LLM decides" (not auditable, not testable) and pure rules
      (brittle for judgment criteria like "procedure matches findings").
-  3. *One extraction call over all documents*, not per-document extraction. Assumes cases are small and
-     accepts that discrepancy checks are non-deterministic (see Assumptions).
+  3. *Two LLM calls over all documents, run in parallel*: (A) extract the facts, (B) assess the criteria and
+     list discrepancies. Not per-document extraction. Assumes cases are small and accepts that discrepancy checks
+     are non-deterministic (see Assumptions). We started with one combined call, but during development the API
+     rejected its schema as too large for structured outputs ("compiled grammar is too large"). Probing showed
+     each half fits on its own, and the whole schema fits only if no field may be null. Alternatives considered:
+     (a) one call with no nullable fields: weaker "missing" semantics, special-case conversion code, and
+     right at the size limit; (b) one call without constrained output (schema in the prompt + Pydantic
+     validation): loses the guarantee of schema-valid output. We chose the split for three benefits: separation
+     of concerns (reading vs. judging), an easier job per call (one task, a focused prompt), and room for each
+     schema to grow.
+     Cost: about twice the input tokens (cents per case), and the two calls may word the same fact differently,
+     which doesn't affect the decision.
   4. *Tests*: unit tests for the decision logic with hand-written facts (no LLM; fast, free) + one saved live run.
   5. *Output is exactly the required schema*; criteria, evidence and minor-discrepancy warnings go to the
      console log, not the output file.
@@ -188,12 +205,14 @@ Run: `uv run python src/main.py cases/PA-2025-847291`
      status, so they can't contradict each other; it's deterministic, testable and free.
   8. *The APPROVE reason quotes the `procedure_matches_findings` criterion note* instead of a separately
      extracted justification field, which could hedge or drift from the judgment the rules relied on.
-- **Assumptions:** cases are small enough to fit in one LLM call; discrepancy detection
+- **Assumptions:** a whole case is small enough to fit in one LLM context; discrepancy detection
   and per-criterion judgments are done by the LLM and are therefore non-deterministic.
   Only how the judgments are combined into a status is deterministic.
 - **Known limitations:** text-only extraction (checkbox state lost: all boxes read `■`);
-  thresholds and criteria are hard-coded for this procedure type; a single test case; no PHI handling.
-- **Extraction reliability:** a single LLM call can miss or misread a field, and accuracy hasn't
+  thresholds and criteria are hard-coded for this procedure type; a single test case; no PHI handling;
+  no fallback model: if the model refuses or its output is truncated, the run fails with an error
+  (the SDK's server-side fallback to another model was deliberately left out to keep things simple).
+- **Extraction reliability:** an LLM call can miss or misread a field, and accuracy hasn't
   been measured (one case only). The design fails safe on the common errors: a missing required field
   or an `unclear` criterion goes to MANUAL_REVIEW, and evidence quotes are checked against the source.
   An error the system can't catch today: a wrong value that is still plausible (e.g. a misread number)
@@ -225,5 +244,8 @@ Run: `uv run python src/main.py cases/PA-2025-847291`
   7. **Criteria as per-procedure config + CPT/ICD-10 validation against reference tables**, for supporting
      procedure types beyond lung biopsy without code changes, and for catching coding errors such as
      an "additional lobe" CPT code when only one lobe is involved.
-  8. **Data privacy controls** (de-identification before LLM calls, data residency, audit logging),
+  8. **Retry and fallback logic**, for resilience in production: retry (with backoff) when a call returns
+     no valid result, and fall back to another model on refusal. Today the SDK only retries transport
+     errors (rate limits, 5xx, connection errors; 2 retries by default).
+  9. **Data privacy controls** (de-identification before LLM calls, data residency, audit logging),
      for meeting medical-privacy and insurance-regulation requirements when handling real patient data.

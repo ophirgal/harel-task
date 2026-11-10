@@ -6,7 +6,7 @@ The rest of the code depends only on LLMProvider, so supporting another provider
 from typing import Protocol, TypeVar
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -25,14 +25,17 @@ class AnthropicProvider:
         self._client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from the environment
 
     def generate_structured(self, system: str, user: str, output_type: type[T]) -> T:
-        response = self._client.messages.parse(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-            output_format=output_type,  # structured output: the response must match this schema
-            output_config={"effort": self.effort},
-        )
+        try:
+            response = self._client.messages.parse(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+                output_format=output_type,  # structured output: the response must match this schema
+                output_config={"effort": self.effort},
+            )
+        except ValidationError as e:  # the SDK parses before we can check stop_reason, e.g. on truncated JSON
+            raise RuntimeError("LLM output did not match the schema (likely truncated)") from e
         # Anything other than a normal finish (e.g. "max_tokens" truncation or "refusal") means no usable result.
         if response.stop_reason != "end_turn" or response.parsed_output is None:
             raise RuntimeError(f"LLM returned no valid result (stop_reason={response.stop_reason})")
