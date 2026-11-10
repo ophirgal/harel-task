@@ -205,6 +205,21 @@ Run: `uv run python src/main.py cases/PA-2025-847291`
      status, so they can't contradict each other; it's deterministic, testable and free.
   8. *The APPROVE reason quotes the `procedure_matches_findings` criterion note* instead of a separately
      extracted justification field, which could hedge or drift from the judgment the rules relied on.
+- **Prompt iteration (how the prompts got to their current form):** a good part of the work on an LLM app like
+  this is comparing the model's output with the expected output, using human judgment to decide what is wrong,
+  and adjusting the prompt to fix it. On the first live run all four criteria were `met`, but:
+  1. the CPT-code issue was marked `material`, which would have sent the case to MANUAL_REVIEW;
+  2. the `procedure_matches_findings` note hedged about billing codes, and that note is quoted in the APPROVE reason;
+  3. a false discrepancy ("both checkboxes marked") came from our text extraction, not from the documents.
+
+  The fixes:
+  1. `material` was narrowed to inconsistencies that put clinical justification in doubt; coding and
+     administrative issues are `minor`, but still listed;
+  2. criterion notes must address only their criterion;
+  3. the prompt states that checkbox state is lost in extraction.
+
+  The rerun fixed all three. With a single test case this is a sanity check, not a measurement; an eval set
+  (see improvements) is what would make prompt changes measurable.
 - **Assumptions:** a whole case is small enough to fit in one LLM context; discrepancy detection
   and per-criterion judgments are done by the LLM and are therefore non-deterministic.
   Only how the judgments are combined into a status is deterministic.
