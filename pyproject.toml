@@ -1,0 +1,18 @@
+[project]
+name = "prior-auth-review"
+version = "0.1.0"
+description = "AI review of a prior-authorization case: extract, check criteria, recommend."
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=2.8.0",
+    "pydantic>=2.14.3",
+    "pypdf>=7.0.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
