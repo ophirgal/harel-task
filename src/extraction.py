@@ -25,6 +25,8 @@ Criteria:
   clearly contradict it, otherwise "unclear".
 - Evidence quotes must be copied character-for-character from the named document: short, contiguous spans of
   text (a phrase or one sentence). Do not paraphrase, merge or shorten quotes.
+- The note for procedure_matches_findings must say why this approach suits both the lesion (e.g. its location)
+  and the patient (e.g. relevant comorbidities), as documented.
 
 Discrepancies:
 - Compare the documents with each other and list every inconsistency you find (identifiers, dates, ages,

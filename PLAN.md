@@ -218,7 +218,9 @@ Run: `uv run python src/main.py cases/PA-2025-847291`
   2. criterion notes must address only their criterion;
   3. the prompt states that checkbox state is lost in extraction.
 
-  The rerun fixed all three. With a single test case this is a sanity check, not a measurement; an eval set
+  The rerun fixed all three. A later round asked the `procedure_matches_findings` note to explain why the
+  approach suits both the lesion and the patient (e.g. comorbidities), so the APPROVE reason covers both.
+  A hint in the schema's field description had no effect; an explicit line in the prompt did. With a single test case this is a sanity check, not a measurement; an eval set
   (see improvements) is what would make prompt changes measurable.
 - **Assumptions:** a whole case is small enough to fit in one LLM context; discrepancy detection
   and per-criterion judgments are done by the LLM and are therefore non-deterministic.
