@@ -17,6 +17,8 @@ Extract the requested fields using only what the documents state.
 - If a value is not in the documents, use null (or an empty list). Never guess or infer missing values.
 - When documents disagree on a value, use the one from the most authoritative source for it
   (e.g. the radiology report for imaging findings, the lab report for lab values).
+- clinical.finding is a short noun phrase: suspicion level + location + lesion type, with no further details
+  (e.g. "Suspicious right upper lobe pulmonary nodule"). Details belong in the other clinical fields.
 """
 
 ASSESSMENT_PROMPT = _CONTEXT + """\

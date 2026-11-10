@@ -1,0 +1,30 @@
+{
+  "case_id": "PA-2025-847291",
+  "patient": {
+    "name": "Margaret A. Johnson",
+    "date_of_birth": "1952-03-15",
+    "mrn": "847291"
+  },
+  "request": {
+    "procedure": "Robotic-Assisted Transbronchial Lung Biopsy",
+    "cpt_codes": [
+      "31629",
+      "31632",
+      "77012"
+    ],
+    "requested_date": "2025-12-10"
+  },
+  "clinical_summary": {
+    "finding": "Suspicious right upper lobe pulmonary nodule",
+    "nodule_size": "18 x 15 mm",
+    "lung_rads": "4B",
+    "suv_max": 4.2,
+    "fev1_percent": 62,
+    "dlco_percent": 58,
+    "coagulation_status": "Normal"
+  },
+  "recommendation": {
+    "status": "APPROVE",
+    "reason": "The submitted documentation supports tissue sampling of a suspicious right upper lobe pulmonary nodule. Robotic navigational bronchoscopy suits the lesion because it is a peripheral RUL posterior-segment nodule reachable through patent airways. It suits the patient because she has moderate COPD with emphysema (FEV1 62% predicted), which makes the higher pneumothorax risk of CT-guided transthoracic biopsy less desirable."
+  }
+}

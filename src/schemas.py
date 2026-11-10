@@ -79,7 +79,7 @@ class Request(BaseModel):
 
 class Clinical(BaseModel):
     finding: str | None = Field(
-        description="One short line, e.g. 'Suspicious right upper lobe pulmonary nodule'."
+        description="Short noun phrase: suspicion level + location + lesion type, no further details."
     )
     nodule_location: str | None
     nodule_size: str | None = Field(description="As reported, e.g. '18 x 15 mm'.")
